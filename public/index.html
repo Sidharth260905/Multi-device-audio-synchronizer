@@ -209,7 +209,6 @@
         <input type="range" min="0" max="1" step="0.01" value="1" id="lvol" oninput="lVolChange(this.value)">
         <span id="lvol-l">100%</span>
       </div>
-      <audio id="laudio" autoplay playsinline style="display:none"></audio>
       <button class="btn btn-outline" onclick="leaveRoom()">Leave room</button>
     </div>
 
@@ -231,7 +230,7 @@
 
 const WS_URL = location.protocol==='https:' ? 'wss://'+location.host : 'ws://'+location.host;
 
-let ws, localStream, peerConns={}, peerNames={}, roomCode, hvidEl=null, hostMode=false, audioCtx=null;
+let ws, localStream, peerConns={}, peerNames={}, roomCode, hvidEl=null, hostMode=false, audioCtx=null, gainNode=null;
 
 function sw(tab, el){
   document.querySelectorAll('.tab').forEach(b=>b.classList.remove('on'));
@@ -272,11 +271,12 @@ async function startHost(){
     } else {
       const vid=document.getElementById('hv');
       if(!vid.src){toast('Pick a file first'); return;}
-      const ctx=new AudioContext();
-      const s=ctx.createMediaElementSource(vid);
-      const dest=ctx.createMediaStreamDestination();
-      s.connect(dest); s.connect(ctx.destination);
-      stream=dest.stream; hvidEl=vid; vid.play().catch(()=>{});
+      // captureStream() bypasses AudioContext — much lower latency
+      const ms=vid.captureStream();
+      const audioTracks=ms.getAudioTracks();
+      if(!audioTracks.length){toast('No audio track in file'); return;}
+      stream=new MediaStream(audioTracks);
+      hvidEl=vid; vid.play().catch(()=>{});
     }
   } catch(e){ toast('Audio error: '+e.message); return; }
 
@@ -315,7 +315,7 @@ window.hVolChange=hVolChange;
 
 function lVolChange(v){
   document.getElementById('lvol-l').textContent=Math.round(v*100)+'%';
-  const a=document.getElementById('laudio'); if(a)a.volume=+v;
+  if(gainNode) gainNode.gain.value=+v;
 }
 window.lVolChange=lVolChange;
 
@@ -368,7 +368,19 @@ async function onHostMsg(msg){
     localStream.getTracks().forEach(t=>pc.addTrack(t,localStream));
     pc.onicecandidate=ev=>{ if(ev.candidate) wsSend({type:'ice',to:id,candidate:ev.candidate}); };
     const off=await pc.createOffer();
+    off.sdp=off.sdp.replace(
+      /(a=fmtp:111\s+[^\r\n]*)/,
+      '$1;stereo=1;sprop-stereo=1;maxplaybackrate=48000;maxaveragebitrate=256000;minptime=10;maxptime=20;usedtx=0'
+    );
     await pc.setLocalDescription(off);
+    // Configure sender for high-quality low-latency audio
+    const sender=pc.getSenders().find(s=>s.track?.kind==='audio');
+    if(sender){
+      const p=sender.getParameters();
+      if(!p.encodings) p.encodings=[{}];
+      p.encodings[0].maxBitrate=256000;
+      sender.setParameters(p).catch(()=>{});
+    }
     wsSend({type:'offer', to:id, sdp:off});
     renderPeers();
   }
@@ -388,31 +400,42 @@ async function onHostMsg(msg){
 
 async function onListenMsg(msg){
   if(msg.type==='error'){ toast(msg.message); return; }
-  if(msg.type==='ready'){ document.getElementById('lroom-info').textContent='Connected to room '+msg.room+'. Audio will start playing shortly.'; }
+  if(msg.type==='ready'){ document.getElementById('lstatus').textContent='Connected — waiting for audio stream…'; document.getElementById('lroom-info').textContent='Room '+msg.room; }
   else if(msg.type==='offer'){
     const pc=makePeerConn(msg.from);
     peerConns[msg.from]=pc;
     pc.ontrack=ev=>{
       const stream=ev.streams[0];
       if(!stream) return;
-      // Use AudioContext (created during user gesture) for reliable playback
-      if(audioCtx&&audioCtx.state!=='closed'){
-        if(audioCtx.state==='suspended') audioCtx.resume();
-        const src=audioCtx.createMediaStreamSource(stream);
-        src.connect(audioCtx.destination);
-      }
-      // Also set on audio element as fallback
-      const a=document.getElementById('laudio');
-      a.srcObject=stream;
-      a.play().catch(()=>{});
+      try{
+        if(audioCtx&&audioCtx.state!=='closed'){
+          if(audioCtx.state==='suspended') audioCtx.resume();
+          gainNode=audioCtx.createGain();
+          gainNode.gain.value=+document.getElementById('lvol').value;
+          const src=audioCtx.createMediaStreamSource(stream);
+          src.connect(gainNode);
+          gainNode.connect(audioCtx.destination);
+        }
+      }catch(e){}
     };
     pc.onicecandidate=ev=>{ if(ev.candidate) wsSend({type:'ice',to:msg.from,candidate:ev.candidate}); };
+    // Monitor ICE state for debugging
+    pc.oniceconnectionstatechange=()=>{
+      const el=document.getElementById('lstatus');
+      if(pc.iceConnectionState==='connected'||pc.iceConnectionState==='completed'){
+        el.textContent='Live — audio streaming';
+        el.style.color='var(--green)';
+      } else if(pc.iceConnectionState==='failed'){
+        el.textContent='Connection failed — check network';
+        el.style.color='var(--red-text)';
+      } else {
+        el.textContent='Connecting ('+pc.iceConnectionState+')…';
+      }
+    };
     await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
     const ans=await pc.createAnswer();
     await pc.setLocalDescription(ans);
     wsSend({type:'answer', to:msg.from, sdp:ans});
-    document.getElementById('lstatus').textContent='Live — audio streaming';
-    document.getElementById('lpulse').style.background='var(--green)';
   }
   else if(msg.type==='ice'){
     const pc=peerConns[msg.from];
@@ -438,13 +461,13 @@ async function joinRoom(){
   if(code.length<4){toast('Enter the full code'); return;}
   // Create AudioContext during user gesture so autoplay is allowed
   try{
-    audioCtx=new AudioContext();
+    audioCtx=new AudioContext({latencyHint:'interactive'});
     if(audioCtx.state==='suspended') await audioCtx.resume();
   }catch(e){}
   document.getElementById('btn-join').disabled=true;
   document.getElementById('join-card').style.display='none';
   document.getElementById('listen-card').style.display='';
-  document.getElementById('lroom-info').textContent='Joining room '+code+'…';
+  document.getElementById('lstatus').textContent='Connecting to server…';
   connectWS('listen', code);
 }
 window.joinRoom=joinRoom;
@@ -454,8 +477,7 @@ function leaveRoom(){
   peerConns={};
   if(ws)ws.close();
   if(audioCtx&&audioCtx.state!=='closed') audioCtx.close();
-  audioCtx=null;
-  document.getElementById('laudio').srcObject=null;
+  audioCtx=null; gainNode=null;
   document.getElementById('join-card').style.display='';
   document.getElementById('listen-card').style.display='none';
   document.getElementById('join-code').value='';
