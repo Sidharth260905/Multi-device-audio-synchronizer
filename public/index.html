@@ -209,6 +209,7 @@
         <input type="range" min="0" max="1" step="0.01" value="1" id="lvol" oninput="lVolChange(this.value)">
         <span id="lvol-l">100%</span>
       </div>
+      <audio id="laudio" autoplay playsinline style="position:absolute;width:0;height:0;overflow:hidden;opacity:0;pointer-events:none"></audio>
       <button class="btn btn-outline" onclick="leaveRoom()">Leave room</button>
     </div>
 
@@ -271,12 +272,12 @@ async function startHost(){
     } else {
       const vid=document.getElementById('hv');
       if(!vid.src){toast('Pick a file first'); return;}
-      // captureStream() bypasses AudioContext — much lower latency
-      const ms=vid.captureStream();
-      const audioTracks=ms.getAudioTracks();
-      if(!audioTracks.length){toast('No audio track in file'); return;}
-      stream=new MediaStream(audioTracks);
-      hvidEl=vid; vid.play().catch(()=>{});
+      const ctx=new AudioContext({latencyHint:'interactive'});
+      if(ctx.state==='suspended') await ctx.resume();
+      const s=ctx.createMediaElementSource(vid);
+      const dest=ctx.createMediaStreamDestination();
+      s.connect(dest); s.connect(ctx.destination);
+      stream=dest.stream; hvidEl=vid; vid.play().catch(()=>{});
     }
   } catch(e){ toast('Audio error: '+e.message); return; }
 
@@ -417,6 +418,7 @@ async function onListenMsg(msg){
           gainNode.connect(audioCtx.destination);
         }
       }catch(e){}
+      document.getElementById('laudio').srcObject=stream;
     };
     pc.onicecandidate=ev=>{ if(ev.candidate) wsSend({type:'ice',to:msg.from,candidate:ev.candidate}); };
     // Monitor ICE state for debugging
@@ -478,6 +480,7 @@ function leaveRoom(){
   if(ws)ws.close();
   if(audioCtx&&audioCtx.state!=='closed') audioCtx.close();
   audioCtx=null; gainNode=null;
+  document.getElementById('laudio').srcObject=null;
   document.getElementById('join-card').style.display='';
   document.getElementById('listen-card').style.display='none';
   document.getElementById('join-code').value='';
