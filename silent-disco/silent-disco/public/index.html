@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Silent Disco</title>
+<style>
+  :root {
+    --bg: #f9f9f8;
+    --surface: #ffffff;
+    --border: #e2e0d8;
+    --text: #1a1a18;
+    --muted: #7a7870;
+    --accent: #1a1a18;
+    --green: #1D9E75;
+    --green-bg: #E1F5EE;
+    --green-text: #085041;
+    --blue-bg: #E6F1FB;
+    --blue-text: #0C447C;
+    --red-bg: #FCEBEB;
+    --red-text: #791F1F;
+    --radius: 10px;
+    --radius-sm: 7px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #181816;
+      --surface: #222220;
+      --border: #333330;
+      --text: #f0f0ec;
+      --muted: #888880;
+      --accent: #f0f0ec;
+      --green-bg: #04342C;
+      --green-text: #9FE1CB;
+      --blue-bg: #042C53;
+      --blue-text: #B5D4F4;
+      --red-bg: #501313;
+      --red-text: #F7C1C1;
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  header { border-bottom: 0.5px solid var(--border); padding: 14px 20px; display: flex; align-items: center; gap: 10px; }
+  header .logo { font-size: 18px; font-weight: 600; letter-spacing: -0.3px; }
+  header .sub { font-size: 12px; color: var(--muted); }
+
+  .container { max-width: 520px; margin: 0 auto; padding: 24px 16px; }
+
+  .tabs { display: flex; gap: 6px; margin-bottom: 20px; background: var(--surface); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 4px; }
+  .tab { flex: 1; padding: 9px; border-radius: 7px; border: none; background: transparent; cursor: pointer; font-size: 14px; font-weight: 500; color: var(--muted); transition: all .15s; font-family: inherit; }
+  .tab.on { background: var(--accent); color: var(--bg); }
+
+  .pane { display: none; } .pane.on { display: block; }
+
+  .card { background: var(--surface); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 18px; margin-bottom: 12px; }
+  .card-title { font-size: 13px; font-weight: 600; margin-bottom: 12px; color: var(--text); }
+
+  .stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 12px; }
+  .stat { background: var(--surface); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 14px; text-align: center; }
+  .stat-n { font-size: 24px; font-weight: 600; }
+  .stat-l { font-size: 11px; color: var(--muted); margin-top: 3px; }
+
+  label { font-size: 12px; color: var(--muted); display: block; margin-bottom: 6px; }
+  select, input[type=text] { width: 100%; padding: 9px 11px; border: 0.5px solid var(--border); border-radius: var(--radius-sm); background: var(--bg); color: var(--text); font-size: 14px; font-family: inherit; outline: none; }
+  select:focus, input[type=text]:focus { border-color: var(--accent); }
+
+  .btn { width: 100%; padding: 11px; border-radius: var(--radius-sm); font-size: 14px; font-weight: 500; cursor: pointer; font-family: inherit; border: none; transition: opacity .15s; }
+  .btn:disabled { opacity: .35; cursor: not-allowed; }
+  .btn-dark { background: var(--accent); color: var(--bg); }
+  .btn-dark:hover:not(:disabled) { opacity: .85; }
+  .btn-outline { background: transparent; border: 0.5px solid var(--border); color: var(--text); }
+  .btn-outline:hover:not(:disabled) { background: var(--bg); }
+
+  .code-display { font-family: 'Courier New', monospace; font-size: 38px; font-weight: 700; letter-spacing: 8px; color: var(--text); }
+  input.code-input { font-family: 'Courier New', monospace; font-size: 26px; letter-spacing: 6px; text-align: center; text-transform: uppercase; }
+
+  .info-box { background: var(--bg); border-radius: var(--radius-sm); padding: 10px 13px; font-size: 12px; color: var(--muted); line-height: 1.6; margin-bottom: 12px; }
+
+  .badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 20px; font-size: 11px; font-weight: 500; }
+  .b-green { background: var(--green-bg); color: var(--green-text); }
+  .b-blue  { background: var(--blue-bg);  color: var(--blue-text); }
+  .b-red   { background: var(--red-bg);   color: var(--red-text); }
+
+  .peer-row { display: flex; align-items: center; justify-content: space-between; padding: 9px 0; border-bottom: 0.5px solid var(--border); }
+  .peer-row:last-child { border-bottom: none; }
+
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); display: inline-block; }
+  .dot.pulse { animation: blink 1.4s infinite; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.2} }
+
+  video { width: 100%; border-radius: var(--radius-sm); background: #000; max-height: 200px; display: block; margin-bottom: 12px; }
+
+  .vol-row { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+  .vol-row input[type=range] { flex: 1; }
+  .vol-row span { font-size: 12px; color: var(--muted); min-width: 36px; }
+
+  .copy-row { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
+  .btn-copy { padding: 8px 14px; font-size: 12px; white-space: nowrap; }
+
+  .step { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 10px; font-size: 13px; color: var(--muted); }
+  .step-n { background: var(--border); border-radius: 50%; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; color: var(--text); flex-shrink: 0; margin-top: 1px; }
+
+  .listen-live { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .listen-live strong { font-size: 15px; }
+
+  #toast { position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%); background: var(--accent); color: var(--bg); padding: 8px 18px; border-radius: 20px; font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; white-space: nowrap; }
+  #toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="logo">🎧 Silent Disco</div>
+    <div class="sub">Stream audio to unlimited devices</div>
+  </div>
+</header>
+
+<div class="container">
+
+  <div class="tabs">
+    <button class="tab on" id="tb-host" onclick="sw('host',this)">Host</button>
+    <button class="tab" id="tb-listen" onclick="sw('listen',this)">Listen</button>
+  </div>
+
+  <!-- HOST -->
+  <div class="pane on" id="pane-host">
+
+    <div class="stat-grid">
+      <div class="stat"><div class="stat-n" id="s-count">0</div><div class="stat-l">Listeners</div></div>
+      <div class="stat"><div class="stat-n" id="s-state">Idle</div><div class="stat-l">Status</div></div>
+      <div class="stat"><div class="stat-n" id="s-code">—</div><div class="stat-l">Room</div></div>
+    </div>
+
+    <div class="card" id="setup-card">
+      <div class="card-title">Setup</div>
+      <label>Audio source</label>
+      <select id="src-sel" style="margin-bottom:12px" onchange="onSrcChange()">
+        <option value="file" selected>Upload video / audio file</option>
+        <option value="mic">Microphone</option>
+        <option value="tab">System / tab audio (Chrome)</option>
+      </select>
+
+      <div id="file-zone">
+        <input type="file" id="ffile" accept="video/*,audio/*" style="display:none" onchange="onFile()">
+        <button class="btn btn-outline" style="margin-bottom:8px" onclick="document.getElementById('ffile').click()">
+          ↑ Choose file
+        </button>
+        <div id="fname" style="font-size:12px;color:var(--muted);margin-bottom:12px"></div>
+      </div>
+
+      <div id="vid-wrap" style="display:none">
+        <video id="hv" controls></video>
+      </div>
+
+      <button class="btn btn-dark" id="btn-go" onclick="startHost()">Start broadcast</button>
+    </div>
+
+    <div class="card" id="room-card" style="display:none">
+      <div class="card-title">Share this code</div>
+      <div class="copy-row">
+        <span class="code-display" id="rcode">——</span>
+        <button class="btn btn-outline btn-copy" onclick="doCopy()">Copy</button>
+      </div>
+      <div class="info-box">
+        Tell each listener to open <strong>this site</strong>, tap <strong>Listen</strong>, and enter this code. They'll hear the audio through their own earbuds instantly — works on any phone, tablet, or laptop.
+      </div>
+      <div class="vol-row">
+        <span style="font-size:12px;color:var(--muted)">Vol</span>
+        <input type="range" min="0" max="1" step="0.01" value="1" id="hvol" oninput="hVolChange(this.value)">
+        <span id="hvol-l">100%</span>
+      </div>
+      <button class="btn btn-outline" onclick="stopHost()">Stop broadcast</button>
+    </div>
+
+    <div class="card" id="peers-card" style="display:none">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <div class="card-title" style="margin:0">Listeners</div>
+        <span class="badge b-green" id="peers-badge">0 online</span>
+      </div>
+      <div id="peers-list"><div style="font-size:13px;color:var(--muted)">Nobody connected yet.</div></div>
+    </div>
+
+  </div>
+
+  <!-- LISTEN -->
+  <div class="pane" id="pane-listen">
+
+    <div class="card" id="join-card">
+      <div class="card-title">Join a room</div>
+      <label>Room code</label>
+      <input class="code-input" id="join-code" type="text" maxlength="6" placeholder="ABC123"
+        oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9]/g,'')"
+        onkeydown="if(event.key==='Enter')joinRoom()"
+        style="margin-bottom:12px">
+      <div class="info-box">Ask the host for their 6-character room code. Make sure your earbuds are connected to this device before joining.</div>
+      <button class="btn btn-dark" id="btn-join" onclick="joinRoom()">Join room</button>
+    </div>
+
+    <div class="card" style="display:none" id="listen-card">
+      <div class="listen-live">
+        <span class="dot pulse" id="lpulse"></span>
+        <strong id="lstatus">Connecting…</strong>
+      </div>
+      <div class="info-box" id="lroom-info"></div>
+      <div class="vol-row">
+        <span style="font-size:12px;color:var(--muted)">Vol</span>
+        <input type="range" min="0" max="1" step="0.01" value="1" id="lvol" oninput="lVolChange(this.value)">
+        <span id="lvol-l">100%</span>
+      </div>
+      <audio id="laudio" autoplay playsinline style="display:none"></audio>
+      <button class="btn btn-outline" onclick="leaveRoom()">Leave room</button>
+    </div>
+
+    <div class="card">
+      <div class="card-title">How it works</div>
+      <div class="step"><div class="step-n">1</div><div>Host picks a video or audio file and starts the broadcast</div></div>
+      <div class="step"><div class="step-n">2</div><div>Each listener opens this page and enters the room code</div></div>
+      <div class="step"><div class="step-n">3</div><div>Audio streams directly — low latency, no app needed</div></div>
+    </div>
+
+  </div>
+
+</div>
+
+<div id="toast"></div>
+
+<script>
+(function(){
+
+const WS_URL = location.protocol==='https:' ? 'wss://'+location.host : 'ws://'+location.host;
+
+let ws, localStream, peerConns={}, peerNames={}, roomCode, hvidEl=null, hostMode=false;
+
+function sw(tab, el){
+  document.querySelectorAll('.tab').forEach(b=>b.classList.remove('on'));
+  document.querySelectorAll('.pane').forEach(p=>p.classList.remove('on'));
+  el.classList.add('on');
+  document.getElementById('pane-'+tab).classList.add('on');
+}
+window.sw = sw;
+
+function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2000); }
+
+function onSrcChange(){
+  const v=document.getElementById('src-sel').value;
+  document.getElementById('file-zone').style.display=v==='file'?'':'none';
+  if(v!=='file') document.getElementById('vid-wrap').style.display='none';
+}
+window.onSrcChange=onSrcChange;
+
+function onFile(){
+  const f=document.getElementById('ffile').files[0]; if(!f)return;
+  document.getElementById('fname').textContent=f.name;
+  const url=URL.createObjectURL(f);
+  const v=document.getElementById('hv');
+  v.src=url;
+  document.getElementById('vid-wrap').style.display=f.type.startsWith('video')?'':'none';
+}
+window.onFile=onFile;
+
+async function startHost(){
+  const src=document.getElementById('src-sel').value;
+  let stream;
+  try {
+    if(src==='mic'){
+      stream=await navigator.mediaDevices.getUserMedia({audio:true,video:false});
+    } else if(src==='tab'){
+      const d=await navigator.mediaDevices.getDisplayMedia({audio:true,video:true});
+      stream=new MediaStream(d.getAudioTracks());
+    } else {
+      const vid=document.getElementById('hv');
+      if(!vid.src){toast('Pick a file first'); return;}
+      const ctx=new AudioContext();
+      const s=ctx.createMediaElementSource(vid);
+      const dest=ctx.createMediaStreamDestination();
+      s.connect(dest); s.connect(ctx.destination);
+      stream=dest.stream; hvidEl=vid; vid.play().catch(()=>{});
+    }
+  } catch(e){ toast('Audio error: '+e.message); return; }
+
+  localStream=stream; hostMode=true;
+  document.getElementById('btn-go').disabled=true;
+  connectWS('host');
+}
+window.startHost=startHost;
+
+function stopHost(){
+  if(localStream)localStream.getTracks().forEach(t=>t.stop());
+  if(hvidEl){hvidEl.pause();hvidEl=null;}
+  if(ws)ws.close();
+  Object.values(peerConns).forEach(p=>{try{p.close();}catch(e){}});
+  peerConns={}; peerNames={}; hostMode=false;
+  document.getElementById('btn-go').disabled=false;
+  document.getElementById('room-card').style.display='none';
+  document.getElementById('peers-card').style.display='none';
+  document.getElementById('s-state').textContent='Idle';
+  document.getElementById('s-count').textContent='0';
+  document.getElementById('s-code').textContent='—';
+  renderPeers();
+}
+window.stopHost=stopHost;
+
+function doCopy(){
+  navigator.clipboard.writeText(roomCode).then(()=>toast('Copied!')).catch(()=>toast('Code: '+roomCode));
+}
+window.doCopy=doCopy;
+
+function hVolChange(v){
+  document.getElementById('hvol-l').textContent=Math.round(v*100)+'%';
+  if(hvidEl)hvidEl.volume=+v;
+}
+window.hVolChange=hVolChange;
+
+function lVolChange(v){
+  document.getElementById('lvol-l').textContent=Math.round(v*100)+'%';
+  const a=document.getElementById('laudio'); if(a)a.volume=+v;
+}
+window.lVolChange=lVolChange;
+
+function renderPeers(){
+  const ids=Object.keys(peerConns);
+  document.getElementById('s-count').textContent=ids.length;
+  document.getElementById('peers-badge').textContent=ids.length+' online';
+  const list=document.getElementById('peers-list');
+  if(!ids.length){ list.innerHTML='<div style="font-size:13px;color:var(--muted)">Nobody connected yet.</div>'; return; }
+  list.innerHTML=ids.map((id,i)=>`
+    <div class="peer-row">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span class="dot pulse"></span>
+        <span style="font-size:13px">${peerNames[id]||'Listener '+(i+1)}</span>
+      </div>
+      <span class="badge b-green">● Live</span>
+    </div>`).join('');
+}
+
+function connectWS(role, code){
+  ws=new WebSocket(WS_URL);
+  ws.onopen=()=>{
+    if(role==='host') ws.send(JSON.stringify({type:'create', room: genCode()}));
+    else ws.send(JSON.stringify({type:'join', room:code, name:'Listener'}));
+  };
+  ws.onmessage=async(e)=>{
+    let msg; try{msg=JSON.parse(e.data);}catch{return;}
+    if(role==='host') await onHostMsg(msg);
+    else await onListenMsg(msg);
+  };
+  ws.onerror=()=>toast('Connection error');
+}
+
+function genCode(){ return Math.random().toString(36).slice(2,8).toUpperCase(); }
+
+async function onHostMsg(msg){
+  if(msg.type==='created'){
+    roomCode=msg.room;
+    document.getElementById('rcode').textContent=roomCode;
+    document.getElementById('s-code').textContent=roomCode;
+    document.getElementById('s-state').textContent='Live';
+    document.getElementById('room-card').style.display='';
+    document.getElementById('peers-card').style.display='';
+  }
+  else if(msg.type==='joined'){
+    const id=msg.from;
+    peerNames[id]=msg.name||'Listener';
+    const pc=makePeerConn(id);
+    peerConns[id]=pc;
+    localStream.getTracks().forEach(t=>pc.addTrack(t,localStream));
+    pc.onicecandidate=ev=>{ if(ev.candidate) wsSend({type:'ice',to:id,candidate:ev.candidate}); };
+    const off=await pc.createOffer();
+    await pc.setLocalDescription(off);
+    wsSend({type:'offer', to:id, sdp:off});
+    renderPeers();
+  }
+  else if(msg.type==='answer'){
+    const pc=peerConns[msg.from];
+    if(pc) await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+  }
+  else if(msg.type==='ice'){
+    const pc=peerConns[msg.from];
+    if(pc) try{await pc.addIceCandidate(new RTCIceCandidate(msg.candidate));}catch(e){}
+  }
+  else if(msg.type==='left'){
+    const pc=peerConns[msg.from];
+    if(pc){try{pc.close();}catch(e){} delete peerConns[msg.from]; delete peerNames[msg.from]; renderPeers();}
+  }
+}
+
+async function onListenMsg(msg){
+  if(msg.type==='error'){ toast(msg.message); return; }
+  if(msg.type==='ready'){ document.getElementById('lroom-info').textContent='Connected to room '+msg.room+'. Audio will start playing shortly.'; }
+  else if(msg.type==='offer'){
+    const pc=makePeerConn(msg.from);
+    peerConns[msg.from]=pc;
+    pc.ontrack=ev=>{
+      const a=document.getElementById('laudio');
+      if(ev.streams[0]) a.srcObject=ev.streams[0];
+    };
+    pc.onicecandidate=ev=>{ if(ev.candidate) wsSend({type:'ice',to:msg.from,candidate:ev.candidate}); };
+    await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+    const ans=await pc.createAnswer();
+    await pc.setLocalDescription(ans);
+    wsSend({type:'answer', to:msg.from, sdp:ans});
+    document.getElementById('lstatus').textContent='Live — audio streaming';
+    document.getElementById('lpulse').style.background='var(--green)';
+  }
+  else if(msg.type==='ice'){
+    const pc=peerConns[msg.from];
+    if(pc) try{await pc.addIceCandidate(new RTCIceCandidate(msg.candidate));}catch(e){}
+  }
+  else if(msg.type==='host-left'){
+    toast('Host ended the broadcast');
+    leaveRoom();
+  }
+}
+
+function makePeerConn(){
+  return new RTCPeerConnection({iceServers:[
+    {urls:'stun:stun.l.google.com:19302'},
+    {urls:'stun:stun1.l.google.com:19302'}
+  ]});
+}
+
+function wsSend(obj){ if(ws&&ws.readyState===1) ws.send(JSON.stringify(obj)); }
+
+async function joinRoom(){
+  const code=document.getElementById('join-code').value.trim().toUpperCase();
+  if(code.length<4){toast('Enter the full code'); return;}
+  document.getElementById('btn-join').disabled=true;
+  document.getElementById('join-card').style.display='none';
+  document.getElementById('listen-card').style.display='';
+  document.getElementById('lroom-info').textContent='Joining room '+code+'…';
+  connectWS('listen', code);
+}
+window.joinRoom=joinRoom;
+
+function leaveRoom(){
+  Object.values(peerConns).forEach(p=>{try{p.close();}catch(e){}});
+  peerConns={};
+  if(ws)ws.close();
+  document.getElementById('laudio').srcObject=null;
+  document.getElementById('join-card').style.display='';
+  document.getElementById('listen-card').style.display='none';
+  document.getElementById('join-code').value='';
+  document.getElementById('btn-join').disabled=false;
+}
+window.leaveRoom=leaveRoom;
+
+})();
+</script>
+</body>
+</html>
