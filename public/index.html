@@ -231,7 +231,7 @@
 
 const WS_URL = location.protocol==='https:' ? 'wss://'+location.host : 'ws://'+location.host;
 
-let ws, localStream, peerConns={}, peerNames={}, roomCode, hvidEl=null, hostMode=false;
+let ws, localStream, peerConns={}, peerNames={}, roomCode, hvidEl=null, hostMode=false, audioCtx=null;
 
 function sw(tab, el){
   document.querySelectorAll('.tab').forEach(b=>b.classList.remove('on'));
@@ -393,8 +393,18 @@ async function onListenMsg(msg){
     const pc=makePeerConn(msg.from);
     peerConns[msg.from]=pc;
     pc.ontrack=ev=>{
+      const stream=ev.streams[0];
+      if(!stream) return;
+      // Use AudioContext (created during user gesture) for reliable playback
+      if(audioCtx&&audioCtx.state!=='closed'){
+        if(audioCtx.state==='suspended') audioCtx.resume();
+        const src=audioCtx.createMediaStreamSource(stream);
+        src.connect(audioCtx.destination);
+      }
+      // Also set on audio element as fallback
       const a=document.getElementById('laudio');
-      if(ev.streams[0]) a.srcObject=ev.streams[0];
+      a.srcObject=stream;
+      a.play().catch(()=>{});
     };
     pc.onicecandidate=ev=>{ if(ev.candidate) wsSend({type:'ice',to:msg.from,candidate:ev.candidate}); };
     await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
@@ -426,6 +436,11 @@ function wsSend(obj){ if(ws&&ws.readyState===1) ws.send(JSON.stringify(obj)); }
 async function joinRoom(){
   const code=document.getElementById('join-code').value.trim().toUpperCase();
   if(code.length<4){toast('Enter the full code'); return;}
+  // Create AudioContext during user gesture so autoplay is allowed
+  try{
+    audioCtx=new AudioContext();
+    if(audioCtx.state==='suspended') await audioCtx.resume();
+  }catch(e){}
   document.getElementById('btn-join').disabled=true;
   document.getElementById('join-card').style.display='none';
   document.getElementById('listen-card').style.display='';
@@ -438,6 +453,8 @@ function leaveRoom(){
   Object.values(peerConns).forEach(p=>{try{p.close();}catch(e){}});
   peerConns={};
   if(ws)ws.close();
+  if(audioCtx&&audioCtx.state!=='closed') audioCtx.close();
+  audioCtx=null;
   document.getElementById('laudio').srcObject=null;
   document.getElementById('join-card').style.display='';
   document.getElementById('listen-card').style.display='none';
